@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const Product = require('./models/meatData');
 const Category = require('./models/category');
 const SubCategory = require('./models/subCategory');
+const DuplicateProduct = require('./models/duplicateProduct');
+const NewProduct = require('./models/newProduct');
 
 const app = express();
 app.use(express.json());
@@ -22,7 +24,7 @@ app.get('/', async (req, res) => {
         slug: "dasa",
         subcategoryImage: "sadsa",
         category: '6798a4ced507edc43cd84398',
-        
+
     })
     res.send('Hello from Node.js + MongoDB server!');
 });
@@ -124,6 +126,14 @@ app.post('/meatData', async (req, res) => {
             });
 
             if (existingProduct) {
+                await DuplicateProduct.create({
+                    productName: item.productName || "",
+                    productImage: item.image_urls || [],
+                    slug: item.productName?.toLowerCase().replace(/\s+/g, "-") || "",
+                    price: item.price || 0,
+                    category: item.categoryName,
+                    subCategory: item.subcategoryName || "",
+                })
                 console.log(`⚠️ Skipped duplicate product: ${item.productName}`);
                 continue;
             }
@@ -138,6 +148,83 @@ app.post('/meatData', async (req, res) => {
             };
 
             const result = await Product.create(productData);
+            if (result) {
+                console.log(`✅ Product created: ${result.productName}`);
+            }
+        }
+
+        console.log("Processed Product ==========>", payload.length);
+
+        return res.status(201).json({ success: true });
+    } catch (error) {
+        console.error("❌ Error creating products:", error);
+        return res.status(500).json({ success: false, error: "Server Error" });
+    }
+});
+
+app.post('/newProduct', async (req, res) => {
+    const payload = req.body;
+
+    // console.log("req body ======>", payload);
+
+    if (!Array.isArray(payload) || payload.length === 0) {
+        return res.status(200).json({
+            success: true
+        });
+    }
+
+    try {
+        // Cache categories to reduce repeated DB calls
+        // const categoryCache = new Map();
+
+        for (const item of payload) {
+            console.log("processing item ==========>", item.productName);
+            // if (!item.image_urls || item.image_urls.length === 0) {
+            //     console.log("image url not found ====>", item);
+            //     continue;
+            // };
+
+            // const categoryNameKey = item.categoryName.toLowerCase();
+
+            // let categoryData = categoryCache.get(categoryNameKey);
+            // if (!categoryData) {
+            //     categoryData = await Category.findOne({
+            //         name: { $regex: new RegExp(`^${item.categoryName}$`, "i") },
+            //     });
+            //     if (!categoryData) {
+            //         console.log("categoryData not found ====>", item);
+            //         continue;
+            //     };;
+            //     categoryCache.set(categoryNameKey, categoryData);
+            // }
+
+            const existingProduct = await NewProduct.findOne({
+                productName: { $regex: new RegExp(`^${item.productName}$`, "i") }
+            });
+
+            if (existingProduct) {
+                await DuplicateProduct.create({
+                    productName: item.productName || "",
+                    productImage: item.image_urls || [],
+                    slug: item.productName?.toLowerCase().replace(/\s+/g, "-") || "",
+                    price: item.price || 0,
+                    category: item.categoryName,
+                    subCategory: item.subcategoryName || "",
+                })
+                console.log(`⚠️ Skipped duplicate product: ${item.productName}`);
+                continue;
+            }
+
+            const productData = {
+                productName: item.productName || "",
+                productImage: item.image_urls || [],
+                slug: item.productName?.toLowerCase().replace(/\s+/g, "-") || "",
+                price: item.price || 0,
+                category: item.categoryName,
+                subCategory: item.subcategoryName || "",
+            };
+
+            const result = await NewProduct.create(productData);
             if (result) {
                 console.log(`✅ Product created: ${result.productName}`);
             }
