@@ -6,6 +6,7 @@ const Category = require('./models/category');
 const SubCategory = require('./models/subCategory');
 const DuplicateProduct = require('./models/duplicateProduct');
 const NewProduct = require('./models/newProduct');
+const axios = require("axios");
 
 const app = express();
 app.use(express.json());
@@ -239,6 +240,38 @@ app.post('/newProduct', async (req, res) => {
     }
 });
 
+const BATCH_SIZE = 50;
+const TARGET_API_URL = 'http://localhost:3015/api/v1/product/new-scraped-data';
+
+async function sendProductsInBatches() {
+    let skip = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+        const products = await NewProduct.find({
+            category:"Meat & Seafood"
+        }).skip(skip).limit(BATCH_SIZE).lean();
+
+        if (products.length === 0) {
+            console.log("✅ All products have been sent.");
+            break;
+        }
+
+        for (const product of products) {
+            try {
+                 await axios.post(TARGET_API_URL, product);
+                console.log(`✅ Sent product: ${product.productName}`);
+            } catch (error) {
+                console.error(`❌ Failed to send product ${product.productName}:`, error.message);
+                
+            }
+        }
+
+        skip += BATCH_SIZE;
+        hasMore = products.length === BATCH_SIZE;
+    }
+}
+sendProductsInBatches();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
