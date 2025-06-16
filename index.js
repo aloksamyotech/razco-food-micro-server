@@ -7,6 +7,8 @@ const SubCategory = require('./models/subCategory');
 const DuplicateProduct = require('./models/duplicateProduct');
 const NewProduct = require('./models/newProduct');
 const axios = require("axios");
+const DuplicateProductUrl = require('./models/duplicatewithUrl');
+const NewProductUrl = require('./models/productWithUrl');
 
 const app = express();
 app.use(express.json());
@@ -20,13 +22,27 @@ mongoose.connect(process.env.MONGO_URI2, {
     .catch(err => console.error('❌ MongoDB connection error:', err));
 
 app.get('/', async (req, res) => {
-    await SubCategory.create({
-        subcategoryName: "gfh",
-        slug: "dasa",
-        subcategoryImage: "sadsa",
-        category: '6798a4ced507edc43cd84398',
+    // await SubCategory.create({
+    //     subcategoryName: "gfh",
+    //     slug: "dasa",
+    //     subcategoryImage: "sadsa",
+    //     category: '6798a4ced507edc43cd84398',
 
-    })
+    // })
+
+    // try {
+    //     const result = await NewProduct.updateMany(
+    //         {
+            
+    //             category: "Canned Tomatoes"
+    //         },
+    //         { $set: { category: "Canned Goods & Soups" } }
+    //     );
+
+    //     console.log(`✅ Updated ${result.modifiedCount} products`);
+    // } catch (error) {
+    //     console.error("❌ Error updating subCategory:", error);
+    // }
     res.send('Hello from Node.js + MongoDB server!');
 });
 
@@ -240,6 +256,59 @@ app.post('/newProduct', async (req, res) => {
     }
 });
 
+app.post('/newProductUrl', async (req, res) => {
+    const payload = req.body;
+
+    // console.log("req body ======>", payload);
+
+    if (!Array.isArray(payload) || payload.length === 0) {
+        return res.status(200).json({
+            success: true
+        });
+    }
+
+    try {
+
+        for (const item of payload) {
+            console.log("processing item ==========>", item.productName);
+
+            const existingProduct = await NewProductUrl.findOne({
+                productName: { $regex: new RegExp(`^${item.productName}$`, "i") }
+            });
+
+            if (existingProduct) {
+                await DuplicateProductUrl.create({
+                    productName: item.productName || "",
+                    price: item.price || 0,
+                    category: item.categoryName,
+                    subCategory: item.subcategoryName || "",
+                })
+                console.log(`⚠️ Skipped duplicate product: ${item.productName}`);
+                continue;
+            }
+
+            const productData = {
+                productName: item.productName || "",
+                price: item.price || 0,
+                category: item.categoryName,
+                subCategory: item.subcategoryName || "",
+            };
+
+            const result = await NewProductUrl.create(productData);
+            if (result) {
+                console.log(`✅ Product created: ${result.productName}`);
+            }
+        }
+
+        console.log("Processed Product ==========>", payload.length);
+
+        return res.status(201).json({ success: true });
+    } catch (error) {
+        console.error("❌ Error creating products:", error);
+        return res.status(500).json({ success: false, error: "Server Error" });
+    }
+});
+
 const BATCH_SIZE = 50;
 const TARGET_API_URL = 'http://localhost:3015/api/v1/product/new-scraped-data';
 
@@ -249,7 +318,7 @@ async function sendProductsInBatches() {
 
     while (hasMore) {
         const products = await NewProduct.find({
-            category:"Meat & Seafood"
+            category: "Meat & Seafood"
         }).skip(skip).limit(BATCH_SIZE).lean();
 
         if (products.length === 0) {
@@ -259,11 +328,11 @@ async function sendProductsInBatches() {
 
         for (const product of products) {
             try {
-                 await axios.post(TARGET_API_URL, product);
+                await axios.post(TARGET_API_URL, product);
                 console.log(`✅ Sent product: ${product.productName}`);
             } catch (error) {
                 console.error(`❌ Failed to send product ${product.productName}:`, error.message);
-                
+
             }
         }
 
@@ -271,7 +340,7 @@ async function sendProductsInBatches() {
         hasMore = products.length === BATCH_SIZE;
     }
 }
-sendProductsInBatches();
+// sendProductsInBatches();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
