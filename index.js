@@ -282,6 +282,7 @@ app.post('/newProductUrl', async (req, res) => {
                     price: item.price || 0,
                     category: item.categoryName,
                     subCategory: item.subcategoryName || "",
+                    productUrl: item.productUrl || ""
                 })
                 console.log(`⚠️ Skipped duplicate product: ${item.productName}`);
                 continue;
@@ -292,6 +293,7 @@ app.post('/newProductUrl', async (req, res) => {
                 price: item.price || 0,
                 category: item.categoryName,
                 subCategory: item.subcategoryName || "",
+                productUrl: item.productUrl || ""
             };
 
             const result = await NewProductUrl.create(productData);
