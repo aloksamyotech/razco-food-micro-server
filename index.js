@@ -10,6 +10,7 @@ const axios = require("axios");
 const DuplicateProductUrl = require('./models/duplicatewithUrl');
 const NewProductUrl = require('./models/productWithUrl');
 const scrapeProductDetails = require('./helper/scrap');
+const scrapeProductDetailsFromScrapAPI = require('./helper/newScrapApi');
 
 const app = express();
 app.use(express.json());
@@ -361,8 +362,13 @@ async function scrapeProduct(start = 0, end = Infinity) {
 
         for (const product of products) {
             try {
+                if (product.details) {
+                    console.log("Data Already exist ⚠️ Skipped = ", product._id);
+                    continue;
+                }
+                
                 console.log("scraping for------->", product?.productName);
-                const productData = await scrapeProductDetails(product?.productUrl);
+                const productData = await scrapeProductDetailsFromScrapAPI(product?.productUrl);
 
                 const {
                     allImages,
@@ -398,7 +404,7 @@ async function scrapeProduct(start = 0, end = Infinity) {
     console.log("✅ Processed all product in your range. ✅");
 }
 
-scrapeProduct(0, 2);
+scrapeProduct(0, 900);
 
 
 const PORT = process.env.PORT || 3000;
