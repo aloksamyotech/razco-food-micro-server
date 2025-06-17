@@ -11,6 +11,10 @@ const DuplicateProductUrl = require('./models/duplicatewithUrl');
 const NewProductUrl = require('./models/productWithUrl');
 const scrapeProductDetails = require('./helper/scrap');
 const scrapeProductDetailsFromScrapAPI = require('./helper/newScrapApi');
+const pLimit =  require('p-limit').default;
+
+const CONCURRENCY = 5; // You can increase or decrease this based on testing and rate limits
+const limit = pLimit(CONCURRENCY);
 
 const app = express();
 app.use(express.json());
@@ -313,7 +317,7 @@ app.post('/newProductUrl', async (req, res) => {
     }
 });
 
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 10;
 const TARGET_API_URL = 'http://localhost:3015/api/v1/product/new-scraped-data';
 
 async function sendProductsInBatches() {
@@ -352,23 +356,30 @@ async function scrapeProduct(start = 0, end = Infinity) {
     let hasMore = true;
 
     while (hasMore && skip < end) {
-        const limit = Math.min(BATCH_SIZE, end - skip); // Prevent reading beyond the end
-        const products = await NewProductUrl.find().skip(skip).limit(limit).lean();
+        const limitCount = Math.min(BATCH_SIZE, end - skip); // Prevent reading beyond the end
+        const products = await NewProductUrl.find().skip(skip).limit(limitCount).lean();
 
         if (products.length === 0) {
             console.log("✅ All products in range have been processed.");
             break;
         }
 
-        for (const product of products) {
+        console.log(`🔎 Processing batch from ${skip} to ${skip + products.length}...`);
+
+        const tasks = products.map(product => limit(async () => {
             try {
-                if (product.details) {
-                    console.log("Data Already exist ⚠️ Skipped = ", product._id);
-                    continue;
+                if (product.size) {
+                    console.log("⚠️ Skipped (already scraped):", product._id);
+                    return;
                 }
-                
-                console.log("scraping for------->", product?.productName);
-                const productData = await scrapeProductDetailsFromScrapAPI(product?.productUrl);
+
+                console.log("🔄 Scraping for:", product.productName);
+                const productData = await scrapeProductDetailsFromScrapAPI(product.productUrl);
+
+                if (!productData) {
+                    console.warn("⚠️ No data returned for:", product.productUrl);
+                    return;
+                }
 
                 const {
                     allImages,
@@ -379,29 +390,28 @@ async function scrapeProduct(start = 0, end = Infinity) {
                     size
                 } = productData;
 
-                await NewProductUrl.findByIdAndUpdate(
-                    product._id,
-                    {
-                        productImage: allImages,
-                        details,
-                        ingredients,
-                        Directions: directions,
-                        Warnings: warnings,
-                        size
-                    }
-                );
+                await NewProductUrl.findByIdAndUpdate(product._id, {
+                    productImage: allImages,
+                    details,
+                    ingredients,
+                    Directions: directions,
+                    Warnings: warnings,
+                    size
+                });
 
-                console.log(`✅ saved productData: ${product._id}`);
-            } catch (error) {
-                console.error(`❌ Failed to save productData for ${product._id} (${product.productUrl}):`, error.message);
+                console.log(`✅ Saved data for: ${product._id}`);
+            } catch (err) {
+                console.error(`❌ Error for ${product._id} (${product.productUrl}):`, err.message);
             }
-        }
+        }));
+
+        await Promise.allSettled(tasks);
 
         skip += BATCH_SIZE;
         hasMore = products.length === BATCH_SIZE;
     }
 
-    console.log("✅ Processed all product in your range. ✅");
+    console.log("✅ Finished processing all products in your range.");
 }
 
 scrapeProduct(0, 900);

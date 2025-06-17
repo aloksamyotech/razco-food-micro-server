@@ -27,7 +27,8 @@ const scrapeProductDetailsFromScrapAPI = async (productUrl) => {
     const payload = {
         api_key: 'bda1166764c34d3432e7e758faaeb763',
         url: productPageUrl,
-        render: true // must be enabled to get the JS-rendered version
+        render: true,
+        session_number: Math.floor(Math.random() * 100000)
     };
 
     try {
