@@ -9,6 +9,7 @@ const NewProduct = require('./models/newProduct');
 const axios = require("axios");
 const DuplicateProductUrl = require('./models/duplicatewithUrl');
 const NewProductUrl = require('./models/productWithUrl');
+const scrapeProductDetails = require('./helper/scrap');
 
 const app = express();
 app.use(express.json());
@@ -33,7 +34,7 @@ app.get('/', async (req, res) => {
     // try {
     //     const result = await NewProduct.updateMany(
     //         {
-            
+
     //             category: "Canned Tomatoes"
     //         },
     //         { $set: { category: "Canned Goods & Soups" } }
@@ -343,6 +344,62 @@ async function sendProductsInBatches() {
     }
 }
 // sendProductsInBatches();
+
+
+async function scrapeProduct(start = 0, end = Infinity) {
+    let skip = start;
+    let hasMore = true;
+
+    while (hasMore && skip < end) {
+        const limit = Math.min(BATCH_SIZE, end - skip); // Prevent reading beyond the end
+        const products = await NewProductUrl.find().skip(skip).limit(limit).lean();
+
+        if (products.length === 0) {
+            console.log("✅ All products in range have been processed.");
+            break;
+        }
+
+        for (const product of products) {
+            try {
+                console.log("scraping for------->", product?.productName);
+                const productData = await scrapeProductDetails(product?.productUrl);
+
+                const {
+                    allImages,
+                    details,
+                    ingredients,
+                    directions,
+                    warnings,
+                    size
+                } = productData;
+
+                await NewProductUrl.findByIdAndUpdate(
+                    product._id,
+                    {
+                        productImage: allImages,
+                        details,
+                        ingredients,
+                        Directions: directions,
+                        Warnings: warnings,
+                        size
+                    }
+                );
+
+                console.log(`✅ saved productData: ${product._id}`);
+            } catch (error) {
+                console.error(`❌ Failed to save productData for ${product._id} (${product.productUrl}):`, error.message);
+            }
+        }
+
+        skip += BATCH_SIZE;
+        hasMore = products.length === BATCH_SIZE;
+    }
+
+    console.log("✅ Processed all product in your range. ✅");
+}
+
+scrapeProduct(0, 2);
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

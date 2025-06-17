@@ -37,6 +37,10 @@ const newProductUrlSchema = new mongoose.Schema(
         Warnings: {
             type: String,
             default: null
+        },
+        size: {
+            type: String,
+            default: null
         }
     },
     { timestamps: true }
