@@ -11,7 +11,7 @@ const DuplicateProductUrl = require('./models/duplicatewithUrl');
 const NewProductUrl = require('./models/productWithUrl');
 const scrapeProductDetails = require('./helper/scrap');
 const scrapeProductDetailsFromScrapAPI = require('./helper/newScrapApi');
-const pLimit =  require('p-limit').default;
+const pLimit = require('p-limit').default;
 
 const CONCURRENCY = 5; // You can increase or decrease this based on testing and rate limits
 const limit = pLimit(CONCURRENCY);
@@ -368,7 +368,7 @@ async function scrapeProduct(start = 0, end = Infinity) {
 
         const tasks = products.map(product => limit(async () => {
             try {
-                if (product.size) {
+                if (product.details) {
                     console.log("⚠️ Skipped (already scraped):", product._id);
                     return;
                 }
@@ -390,14 +390,21 @@ async function scrapeProduct(start = 0, end = Infinity) {
                     size
                 } = productData;
 
-                await NewProductUrl.findByIdAndUpdate(product._id, {
-                    productImage: allImages,
-                    details,
-                    ingredients,
-                    Directions: directions,
-                    Warnings: warnings,
-                    size
-                });
+                const updateFields = {};
+
+                if (!product.productImage && allImages) updateFields.productImage = allImages;
+                if (!product.details && details) updateFields.details = details;
+                if (!product.ingredients && ingredients) updateFields.ingredients = ingredients;
+                if (!product.Directions && directions) updateFields.Directions = directions;
+                if (!product.Warnings && warnings) updateFields.Warnings = warnings;
+                if (!product?.size && size) updateFields.size = size;
+
+                if (Object.keys(updateFields).length === 0) {
+                    console.log(`⚠️ All fields already exist for: ${product._id}`);
+                    return;
+                }
+
+                await NewProductUrl.findByIdAndUpdate(product._id, updateFields);
 
                 console.log(`✅ Saved data for: ${product._id}`);
             } catch (err) {
@@ -414,7 +421,7 @@ async function scrapeProduct(start = 0, end = Infinity) {
     console.log("✅ Finished processing all products in your range.");
 }
 
-scrapeProduct(0, 900);
+scrapeProduct(350, 900);
 
 
 const PORT = process.env.PORT || 3000;
